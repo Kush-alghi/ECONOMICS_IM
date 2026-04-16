@@ -1,0 +1,602 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Economics IM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root { --accent: #1d4ed8; --accent-light: #dbeafe; --core-badge: #059669; --user-badge: #7c3aed; }
+  body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; }
+  .live-dot { width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse 1.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1}50%{opacity:.4} }
+  .term-card { transition: all .2s ease; }
+  .term-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); transform: translateY(-1px); }
+  .badge-core { background:#d1fae5;color:#065f46;font-size:10px;padding:2px 8px;border-radius:9999px;font-weight:600;letter-spacing:.05em; }
+  .badge-user { background:#ede9fe;color:#5b21b6;font-size:10px;padding:2px 8px;border-radius:9999px;font-weight:600;letter-spacing:.05em; }
+  .section-header { background:linear-gradient(135deg,#1e3a8a 0%,#1d4ed8 100%);color:white;padding:12px 20px;border-radius:10px 10px 0 0;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase; }
+  .toast { position:fixed;bottom:24px;right:24px;background:#1e293b;color:white;padding:12px 20px;border-radius:10px;font-size:13px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none; }
+  .toast.show { opacity:1; }
+  .residue-item { border-left:3px solid #ef4444;background:#fff5f5; }
+  input[type=text], textarea, select { outline:none; }
+  input[type=text]:focus, textarea:focus, select:focus { ring: 2px solid #1d4ed8; }
+  .modal-overlay { position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px); }
+  .modal-box { background:white;border-radius:16px;padding:32px;width:100%;max-width:560px;box-shadow:0 20px 60px rgba(0,0,0,.2); }
+  #pdf-target .no-pdf { display: block; }
+  @media print { .no-pdf { display:none!important; } }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<!-- EDIT MODAL -->
+<div id="editModal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2 class="text-xl font-bold text-gray-800 mb-1">Edit Term</h2>
+    <p class="text-sm text-gray-500 mb-4">Changes will sync to all collaborators in real-time.</p>
+    <input id="editTermName" type="text" placeholder="Term name" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm mb-3 focus:border-blue-500 transition" />
+    <textarea id="editTermDef" rows="4" placeholder="Definition..." class="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm mb-3 resize-none focus:border-blue-500 transition"></textarea>
+    <input id="editTermSection" type="text" placeholder="Section (e.g. Market Economics)" class="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm mb-4 focus:border-blue-500 transition" />
+    <div class="flex gap-3 justify-end">
+      <button onclick="closeEditModal()" class="px-5 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+      <button onclick="saveEdit()" class="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
+  <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-blue-700 rounded-xl flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-gray-900 leading-tight">Economic IM</h1>
+        <p class="text-xs text-gray-400"> Information Model — Collaborative</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 bg-green-50 border border-green-100 rounded-full px-3 py-1.5">
+        <div class="live-dot"></div>
+        <span class="text-xs font-medium text-green-700" id="connStatus">Connecting…</span>
+      </div>
+      <button onclick="exportPDF()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition no-pdf">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z"/></svg>
+        Export PDF
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- FIREBASE CONFIG NOTICE -->
+<div class="max-w-6xl mx-auto px-6 pt-4 no-pdf" id="firebaseNotice">
+  <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3 items-start">
+    <svg class="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z"/></svg>
+    <div class="text-sm">
+      <strong class="text-amber-800 font-semibold">Firebase Setup Required for Multi-User Sync</strong>
+      <p class="text-amber-700 mt-0.5">Replace the <code class="bg-amber-100 px-1 rounded text-xs">firebaseConfig</code> object in the &lt;script&gt; with your project credentials from the <a href="https://console.firebase.google.com/" target="_blank" class="underline font-medium">Firebase Console</a>. Also enable Realtime Database and set rules to <code class="bg-amber-100 px-1 rounded text-xs">".read": true, ".write": true</code> for testing. Until then, the app runs in <strong>local-only mode</strong>.</p>
+    </div>
+    <button onclick="this.closest('#firebaseNotice').remove()" class="text-amber-500 hover:text-amber-700 ml-auto">✕</button>
+  </div>
+</div>
+
+<!-- MAIN LAYOUT -->
+<main class="max-w-6xl mx-auto px-6 py-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+  <!-- LEFT: ADD NEW TERM PANEL -->
+  <aside class="lg:col-span-1 no-pdf">
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden sticky top-24">
+      <div class="section-header flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add / Edit Term
+      </div>
+      <div class="p-5 flex flex-col gap-3">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Section</label>
+          <select id="addSection" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-700 bg-white focus:border-blue-500 transition">
+            <option value="Introduction to Economics">Introduction to Economics</option>
+            <option value="Market Economics">Market Economics</option>
+            <option value="Cost">Cost</option>
+            <option value="Time Value of Money">Time Value of Money</option>
+            <option value="Economic Analysis">Economic Analysis</option>
+            <option value="Depreciation & Taxes">Depreciation &amp; Taxes</option>
+            <option value="Custom">+ Custom Section…</option>
+          </select>
+        </div>
+        <div id="customSectionDiv" class="hidden">
+          <input id="customSection" type="text" placeholder="Enter custom section name" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-blue-500 transition" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Term Name</label>
+          <input id="addName" type="text" placeholder="e.g. Elasticity" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:border-blue-500 transition" />
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Definition</label>
+          <textarea id="addDef" rows="5" placeholder="Write the definition here…" class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm resize-none focus:border-blue-500 transition"></textarea>
+        </div>
+        <button onclick="addTerm()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Add to BIM
+        </button>
+        <div class="border-t pt-3 mt-1">
+          <p class="text-xs text-gray-400 leading-relaxed text-center">New entries appear as <span class="badge-user">USER</span> and sync live to all collaborators.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mt-4">
+      <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Legend</h3>
+      <div class="flex flex-col gap-2 text-sm">
+        <div class="flex items-center gap-2"><span class="badge-core">CORE</span><span class="text-gray-600">Pre-loaded theory</span></div>
+        <div class="flex items-center gap-2"><span class="badge-user">USER</span><span class="text-gray-600">Collaborator-added</span></div>
+        <div class="flex items-center gap-2"><div class="w-3 h-3 rounded-sm bg-red-100 border border-red-300"></div><span class="text-gray-600">Moved to Residue</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- RIGHT: TERMINOLOGY LIST -->
+  <section class="lg:col-span-2" id="pdf-target">
+    <!-- PDF HEADER (only shows in PDF) -->
+    <div id="pdfHeader" style="display:none" class="mb-6 pb-4 border-b-2 border-blue-700">
+      <h1 class="text-2xl font-bold text-blue-900">Economics</h1>
+      <p class="text-sm text-gray-500 mt-1">Collaborative Information Model — Exported on <span id="exportDate"></span></p>
+    </div>
+
+    <div id="terminologyList" class="flex flex-col gap-6"></div>
+
+    <!-- RESIDUE SECTION -->
+    <div class="mt-10">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="h-px flex-1 bg-red-200"></div>
+        <div class="flex items-center gap-2 text-red-500 font-semibold text-sm">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          Residue / Archive Log
+        </div>
+        <div class="h-px flex-1 bg-red-200"></div>
+      </div>
+      <p class="text-xs text-gray-400 mb-4 text-center">Removed terms are archived here (IM versioning — nothing is truly deleted)</p>
+      <div id="residueList" class="flex flex-col gap-3">
+        <p class="text-sm text-gray-400 text-center py-4 italic" id="residueEmpty">No items archived yet.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ======================== FIREBASE + APP SCRIPT ======================== -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, set, push, remove, onValue, get } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+// ═══════════════════════════════════════════════════════════════════
+//  🔧 FIREBASE CONFIGURATION — Replace with your actual credentials
+//  Get these from: https://console.firebase.google.com/
+//  Project Settings → General → Your Apps → Web App → Config
+// ═══════════════════════════════════════════════════════════════════
+const firebaseConfig = {
+  apiKey: "AIzaSyDOzMdki3engMnODqruAQgPPdBrNUBY6xo",
+  authDomain: "economics-im.firebaseapp.com",
+  databaseURL: "https://economics-im-default-rtdb.firebaseio.com/",
+  projectId: "economics-im",
+  storageBucket: "economics-im.firebasestorage.app",
+  messagingSenderId: "1008922418736",
+  appId: "1:1008922418736:web:5505b227364a863cd097f5"
+};
+// ═══════════════════════════════════════════════════════════════════
+
+const INITIAL_DATA = {
+  "Introduction to Economics": [
+    { term: "Economics", def: "The study of how individuals and societies manage scarce resources to satisfy unlimited wants and needs." },
+    { term: "Scarcity", def: "The fundamental economic problem that arises because resources are limited while human wants are unlimited." },
+    { term: "Rational People", def: "The assumption that individuals systematically and purposefully do the best they can to achieve their objectives, given the available opportunities." },
+    { term: "Trade", def: "The voluntary exchange of goods or services between different parties, allowing specialization and mutual benefit." },
+    { term: "Trade-off", def: "The concept that making one choice requires giving up another; every decision has an opportunity cost." },
+    { term: "Comparative Advantage", def: "The ability of an individual or economy to produce a good at a lower opportunity cost than another, forming the basis for beneficial trade." },
+    { term: "Efficiency", def: "A state in which the economy maximizes output from the available inputs, leaving no resources wasted." },
+    { term: "Equality", def: "The distribution of economic prosperity equally among members of society; often in tension with efficiency." },
+  ],
+  "Market Economics": [
+    { term: "Market", def: "A group of buyers and sellers of a particular good or service, organized so that their decisions determine price and quantity." },
+    { term: "Incentives", def: "Factors that motivate people to act in a certain way, such as rewards or penalties that influence economic decisions." },
+    { term: "Supply and Demand", def: "The dual forces determining prices and quantities in a market: supply refers to producer behavior; demand to consumer behavior." },
+    { term: "Equilibrium", def: "The point at which the quantity supplied equals the quantity demanded, establishing a stable market price." },
+    { term: "Invisible Hand", def: "Adam Smith's metaphor describing how individual self-interest, guided by price signals, leads to efficient market outcomes without central planning." },
+    { term: "Monopoly", def: "A market structure in which a single seller dominates and has significant power to influence prices due to lack of competition." },
+    { term: "Externalities", def: "Costs or benefits of a transaction that fall on third parties not involved in the exchange, leading to market inefficiency." },
+  ],
+  "Cost": [
+    { term: "Cost", def: "The monetary value of resources consumed or sacrificed in the production of goods or services." },
+    { term: "Opportunity Cost", def: "The value of the next-best alternative forgone when making a decision; the true cost of any choice." },
+    { term: "Sunk Cost", def: "A past cost that has already been incurred and cannot be recovered, and therefore should not influence future decisions." },
+  ],
+  "Time Value of Money": [
+    { term: "Money", def: "A medium of exchange, a unit of account, and a store of value that facilitates economic transactions." },
+    { term: "Currency", def: "The physical form of money in circulation — coins and banknotes — issued and regulated by a government or central bank." },
+    { term: "Interest", def: "The cost of borrowing money or the return earned on invested capital, typically expressed as a percentage over time." },
+    { term: "MARR", def: "Minimum Attractive Rate of Return — the minimum return an investor or organization requires before committing capital to a project." },
+  ],
+  "Economic Analysis": [
+    { term: "Capital", def: "Produced means of production — tools, machinery, buildings, and infrastructure — used to create goods and services." },
+    { term: "Labour Market", def: "The market in which workers supply labor services and firms demand labor, determining wages and employment levels." },
+  ],
+  "Depreciation & Taxes": [
+    { term: "Taxes", def: "Compulsory financial contributions levied by government on income, goods, services, or transactions to fund public expenditure." },
+    { term: "Subsidy", def: "A financial benefit granted by the government to individuals or firms to encourage production or consumption of specific goods or services." },
+  ],
+};
+
+let db = null;
+let firebaseConnected = false;
+let localTerms = {};
+let localResidue = [];
+let editingKey = null;
+
+function showToast(msg, color = "#1e293b") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.background = color;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+// ─── Firebase Init ───────────────────────────────────────────────
+function tryFirebase() {
+  if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+    document.getElementById("connStatus").textContent = "Local Mode";
+    loadLocalFallback();
+    return;
+  }
+  try {
+    const app = initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    document.getElementById("connStatus").textContent = "Syncing…";
+
+    // Check if data needs seeding
+    const termsRef = ref(db, "active_theories");
+    get(termsRef).then(snap => {
+      if (!snap.exists()) {
+        seedFirebase();
+      }
+    });
+
+    // Live listener for active terms
+    onValue(ref(db, "active_theories"), (snap) => {
+      localTerms = snap.val() || {};
+      renderAll();
+    });
+
+    // Live listener for residue
+    onValue(ref(db, "residue_log"), (snap) => {
+      localResidue = snap.val() ? Object.values(snap.val()) : [];
+      renderResidue();
+    });
+
+    firebaseConnected = true;
+    document.getElementById("connStatus").textContent = "Live — Synced";
+
+  } catch(e) {
+    document.getElementById("connStatus").textContent = "Local Mode";
+    showToast("Firebase error — running locally", "#dc2626");
+    loadLocalFallback();
+  }
+}
+
+function seedFirebase() {
+  if (!db) return;
+  let i = 0;
+  for (const [section, terms] of Object.entries(INITIAL_DATA)) {
+    for (const item of terms) {
+      const key = `core_${i++}`;
+      set(ref(db, `active_theories/${key}`), {
+        key, section, term: item.term, def: item.def,
+        type: "core", ts: Date.now()
+      });
+    }
+  }
+}
+
+function loadLocalFallback() {
+  let i = 0;
+  for (const [section, terms] of Object.entries(INITIAL_DATA)) {
+    for (const item of terms) {
+      const key = `core_${i++}`;
+      localTerms[key] = { key, section, term: item.term, def: item.def, type: "core", ts: Date.now() };
+    }
+  }
+  renderAll();
+}
+
+// ─── Render ──────────────────────────────────────────────────────
+function renderAll() {
+  const grouped = {};
+  for (const item of Object.values(localTerms)) {
+    if (!grouped[item.section]) grouped[item.section] = [];
+    grouped[item.section].push(item);
+  }
+
+  const order = [...Object.keys(INITIAL_DATA), ...Object.keys(grouped).filter(s => !INITIAL_DATA[s])];
+  const seen = new Set();
+  const orderedSections = order.filter(s => grouped[s] && !seen.has(s) && seen.add(s));
+
+  const container = document.getElementById("terminologyList");
+  container.innerHTML = "";
+
+  for (const section of orderedSections) {
+    const items = grouped[section].sort((a,b) => a.term.localeCompare(b.term));
+    const sectionEl = document.createElement("div");
+    sectionEl.className = "bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden";
+    sectionEl.innerHTML = `<div class="section-header">${escHtml(section)}</div>`;
+    const grid = document.createElement("div");
+    grid.className = "p-4 grid grid-cols-1 sm:grid-cols-2 gap-3";
+    for (const item of items) {
+      grid.innerHTML += termCardHTML(item);
+    }
+    sectionEl.appendChild(grid);
+    container.appendChild(sectionEl);
+  }
+}
+
+function termCardHTML(item) {
+  const badge = item.type === "core"
+    ? `<span class="badge-core">CORE</span>`
+    : `<span class="badge-user">USER</span>`;
+  return `
+  <div class="term-card rounded-xl border border-gray-100 p-4 bg-gray-50 flex flex-col gap-2" data-key="${escHtml(item.key)}">
+    <div class="flex items-start justify-between gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
+        <h3 class="font-bold text-gray-900 text-sm">${escHtml(item.term)}</h3>
+        ${badge}
+      </div>
+      <div class="flex gap-1.5 flex-shrink-0 no-pdf">
+        <button onclick="openEditModal('${escHtml(item.key)}')" title="Edit" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 flex items-center justify-center text-blue-600 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828A2 2 0 019 16.414V13h4-4z"/></svg>
+        </button>
+        <button onclick="deleteTerm('${escHtml(item.key)}')" title="Archive" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+      </div>
+    </div>
+    <p class="text-xs text-gray-600 leading-relaxed">${escHtml(item.def)}</p>
+  </div>`;
+}
+
+function renderResidue() {
+  const list = document.getElementById("residueList");
+  const empty = document.getElementById("residueEmpty");
+  if (!localResidue.length) {
+    list.innerHTML = "";
+    list.appendChild(empty);
+    return;
+  }
+  list.innerHTML = "";
+  for (const item of [...localResidue].reverse()) {
+    const div = document.createElement("div");
+    div.className = "residue-item rounded-xl p-4";
+    div.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="font-bold text-sm text-red-800">${escHtml(item.term)}</span>
+            <span class="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">${escHtml(item.section)}</span>
+          </div>
+          <p class="text-xs text-gray-600 leading-relaxed">${escHtml(item.def)}</p>
+          <p class="text-xs text-gray-400 mt-1.5">Archived: ${new Date(item.archivedAt||item.ts).toLocaleString()}</p>
+        </div>
+        <button onclick="restoreTerm('${escHtml(item.key)}')" title="Restore" class="flex-shrink-0 px-3 py-1.5 text-xs bg-white border border-green-300 text-green-700 rounded-lg hover:bg-green-50 transition no-pdf">Restore</button>
+      </div>`;
+    list.appendChild(div);
+  }
+}
+
+// ─── CRUD ─────────────────────────────────────────────────────────
+window.addTerm = function() {
+  const sectionEl = document.getElementById("addSection");
+  const section = sectionEl.value === "Custom"
+    ? document.getElementById("customSection").value.trim()
+    : sectionEl.value;
+  const name = document.getElementById("addName").value.trim();
+  const def = document.getElementById("addDef").value.trim();
+  if (!section || !name || !def) { showToast("Please fill in all fields.", "#dc2626"); return; }
+
+  const key = `user_${Date.now()}`;
+  const entry = { key, section, term: name, def, type: "user", ts: Date.now() };
+
+  if (firebaseConnected && db) {
+    set(ref(db, `active_theories/${key}`), entry)
+      .then(() => showToast("✓ Term added & synced!", "#059669"))
+      .catch(() => showToast("Sync error", "#dc2626"));
+  } else {
+    localTerms[key] = entry;
+    renderAll();
+    showToast("✓ Term added (local mode).");
+  }
+  document.getElementById("addName").value = "";
+  document.getElementById("addDef").value = "";
+};
+
+window.deleteTerm = function(key) {
+  const item = localTerms[key];
+  if (!item) return;
+  const archived = { ...item, archivedAt: Date.now() };
+
+  if (firebaseConnected && db) {
+    remove(ref(db, `active_theories/${key}`));
+    push(ref(db, "residue_log"), archived);
+    showToast("Term archived to Residue.", "#7c3aed");
+  } else {
+    delete localTerms[key];
+    localResidue.push(archived);
+    renderAll();
+    renderResidue();
+    showToast("Term archived to Residue.");
+  }
+};
+
+window.restoreTerm = function(key) {
+  const item = localResidue.find(i => i.key === key);
+  if (!item) return;
+  const restored = { ...item, type: "user", ts: Date.now() };
+  delete restored.archivedAt;
+
+  if (firebaseConnected && db) {
+    set(ref(db, `active_theories/${key}`), restored);
+    // Remove from residue — need to find Firebase key
+    get(ref(db, "residue_log")).then(snap => {
+      if (snap.exists()) {
+        snap.forEach(child => {
+          if (child.val().key === key) remove(ref(db, `residue_log/${child.key}`));
+        });
+      }
+    });
+    showToast("✓ Term restored!", "#059669");
+  } else {
+    localTerms[key] = restored;
+    localResidue = localResidue.filter(i => i.key !== key);
+    renderAll();
+    renderResidue();
+    showToast("✓ Term restored!");
+  }
+};
+
+window.openEditModal = function(key) {
+  const item = localTerms[key];
+  if (!item) return;
+  editingKey = key;
+  document.getElementById("editTermName").value = item.term;
+  document.getElementById("editTermDef").value = item.def;
+  document.getElementById("editTermSection").value = item.section;
+  document.getElementById("editModal").classList.remove("hidden");
+};
+
+window.closeEditModal = function() {
+  document.getElementById("editModal").classList.add("hidden");
+  editingKey = null;
+};
+
+window.saveEdit = function() {
+  if (!editingKey) return;
+  const item = localTerms[editingKey];
+  const updated = {
+    ...item,
+    term: document.getElementById("editTermName").value.trim(),
+    def: document.getElementById("editTermDef").value.trim(),
+    section: document.getElementById("editTermSection").value.trim(),
+    ts: Date.now()
+  };
+  if (!updated.term || !updated.def || !updated.section) { showToast("Fields cannot be empty.", "#dc2626"); return; }
+
+  if (firebaseConnected && db) {
+    set(ref(db, `active_theories/${editingKey}`), updated)
+      .then(() => showToast("✓ Edit synced to all users!", "#059669"));
+  } else {
+    localTerms[editingKey] = updated;
+    renderAll();
+    showToast("✓ Edit saved (local mode).");
+  }
+  closeEditModal();
+};
+
+// ─── Custom Section Toggle ────────────────────────────────────────
+document.getElementById("addSection").addEventListener("change", function() {
+  document.getElementById("customSectionDiv").classList.toggle("hidden", this.value !== "Custom");
+});
+
+// ─── PDF Export ───────────────────────────────────────────────────
+window.exportPDF = async function() {
+  showToast("Generating PDF…");
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+  let y = margin;
+
+  // Title block
+  pdf.setFillColor(30, 58, 138);
+  pdf.rect(0, 0, pageW, 60, "F");
+  pdf.setTextColor(255,255,255);
+  pdf.setFontSize(18); pdf.setFont("helvetica","bold");
+  pdf.text("Economic Terminology BIM", margin, 38);
+  pdf.setFontSize(9); pdf.setFont("helvetica","normal");
+  pdf.text("Collaborative Building Information Model — " + new Date().toLocaleDateString(), margin, 52);
+  y = 80;
+
+  const grouped = {};
+  for (const item of Object.values(localTerms)) {
+    if (!grouped[item.section]) grouped[item.section] = [];
+    grouped[item.section].push(item);
+  }
+
+  const order = [...Object.keys(INITIAL_DATA), ...Object.keys(grouped).filter(s => !INITIAL_DATA[s])];
+  const seen = new Set();
+  const orderedSections = order.filter(s => grouped[s] && !seen.has(s) && seen.add(s));
+
+  for (const section of orderedSections) {
+    const items = grouped[section].sort((a,b) => a.term.localeCompare(b.term));
+    if (y > pageH - 80) { pdf.addPage(); y = margin; }
+    pdf.setFillColor(240, 245, 255);
+    pdf.rect(margin - 8, y - 12, pageW - 2*margin + 16, 22, "F");
+    pdf.setTextColor(30, 58, 138);
+    pdf.setFontSize(11); pdf.setFont("helvetica","bold");
+    pdf.text(section.toUpperCase(), margin, y + 2);
+    y += 18;
+
+    for (const item of items) {
+      const defLines = pdf.splitTextToSize(item.def, pageW - margin*2 - 20);
+      const blockH = 8 + defLines.length * 12 + 6;
+      if (y + blockH > pageH - 40) { pdf.addPage(); y = margin; }
+      pdf.setTextColor(30,30,30);
+      pdf.setFontSize(10); pdf.setFont("helvetica","bold");
+      pdf.text(item.term, margin, y + 8);
+      const badgeColor = item.type === "core" ? [5,150,105] : [124,58,237];
+      pdf.setFillColor(...badgeColor);
+      pdf.roundedRect(margin + pdf.getTextWidth(item.term) + 6, y + 1, item.type === "core" ? 28 : 28, 10, 2, 2, "F");
+      pdf.setTextColor(255,255,255); pdf.setFontSize(6.5); pdf.setFont("helvetica","bold");
+      pdf.text(item.type === "core" ? "CORE" : "USER", margin + pdf.getTextWidth(item.term) + 9, y + 8.5);
+      pdf.setTextColor(80,80,80); pdf.setFontSize(8.5); pdf.setFont("helvetica","normal");
+      pdf.text(defLines, margin + 8, y + 20);
+      y += blockH + 2;
+    }
+    y += 8;
+  }
+
+  // Residue page
+  if (localResidue.length) {
+    pdf.addPage(); y = margin;
+    pdf.setFillColor(254, 226, 226);
+    pdf.rect(margin - 8, y - 12, pageW - 2*margin + 16, 22, "F");
+    pdf.setTextColor(153, 27, 27);
+    pdf.setFontSize(11); pdf.setFont("helvetica","bold");
+    pdf.text("RESIDUE / ARCHIVE LOG", margin, y + 2);
+    y += 18;
+    for (const item of localResidue) {
+      if (y > pageH - 60) { pdf.addPage(); y = margin; }
+      pdf.setTextColor(30,30,30); pdf.setFontSize(10); pdf.setFont("helvetica","bold");
+      pdf.text(item.term + " [" + item.section + "]", margin, y + 8);
+      const defLines = pdf.splitTextToSize(item.def, pageW - margin*2);
+      pdf.setTextColor(100,100,100); pdf.setFontSize(8.5); pdf.setFont("helvetica","normal");
+      pdf.text(defLines, margin + 8, y + 20);
+      y += 8 + defLines.length * 12 + 10;
+    }
+  }
+
+  pdf.save("Economic_BIM_" + new Date().toISOString().slice(0,10) + ".pdf");
+  showToast("✓ PDF downloaded!", "#059669");
+};
+
+// ─── Utilities ─────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ─── Boot ──────────────────────────────────────────────────────────
+tryFirebase();
+</script>
+</body>
+</html>
